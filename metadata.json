@@ -1,0 +1,6 @@
+{
+  "name": "Awan Academy",
+  "description": "Improvement Crash Half Length Examination Registration and Management System for Awan Academy.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

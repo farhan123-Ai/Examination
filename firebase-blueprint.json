@@ -1,0 +1,311 @@
+{
+  "entities": {
+    "AdminGrant": {
+      "title": "AdminGrant",
+      "description": "Authorized administrator UID grant document.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "grantedByUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "grantedByUid", "createdAt"]
+    },
+    "Administrator": {
+      "title": "Administrator",
+      "description": "Administrator credential record with PBKDF2-HMAC-SHA256 salted hash and rate-limiting state.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "passwordHash": { "type": "string" },
+        "passwordSalt": { "type": "string" },
+        "iterations": { "type": "integer" },
+        "failedAttempts": { "type": "integer" },
+        "lockedUntilMillis": { "type": "integer" },
+        "sessionVersion": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "passwordHash", "passwordSalt", "iterations", "failedAttempts", "lockedUntilMillis", "sessionVersion", "createdAt", "updatedAt"]
+    },
+    "AcademySettings": {
+      "title": "AcademySettings",
+      "description": "Global Awan Academy settings and branding assets (logo, stamp, authorized signature).",
+      "type": "object",
+      "properties": {
+        "academyName": { "type": "string" },
+        "examHeading": { "type": "string" },
+        "instructions": { "type": "string" },
+        "logoBase64": { "type": "string" },
+        "stampBase64": { "type": "string" },
+        "signatureBase64": { "type": "string" },
+        "updatedByUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["academyName", "examHeading", "instructions", "updatedByUid", "createdAt", "updatedAt"]
+    },
+    "Subject": {
+      "title": "Subject",
+      "description": "Configurable examination subject with class assignments and paper code prefix.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "codePrefix": { "type": "string" },
+        "assignedClasses": { "type": "array" },
+        "active": { "type": "boolean" },
+        "sortOrder": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "codePrefix", "assignedClasses", "active", "sortOrder", "createdAt", "updatedAt"]
+    },
+    "ExaminationTiming": {
+      "title": "ExaminationTiming",
+      "description": "Configurable examination timing slot (slot 1 or 2).",
+      "type": "object",
+      "properties": {
+        "slotNumber": { "type": "integer" },
+        "label": { "type": "string" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "durationMinutes": { "type": "integer" },
+        "instructions": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["slotNumber", "label", "startTime", "endTime", "durationMinutes", "instructions", "active", "createdAt", "updatedAt"]
+    },
+    "Counter": {
+      "title": "Counter",
+      "description": "Monotonically increasing atomic sequence counter for registration tokens and paper codes.",
+      "type": "object",
+      "properties": {
+        "currentSeq": { "type": "integer" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["currentSeq", "updatedAt"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Student record created during registration.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "fatherName": { "type": "string" },
+        "className": { "type": "string" },
+        "section": { "type": "string" },
+        "rollNumber": { "type": "string" },
+        "studentNumber": { "type": "string" },
+        "registrationNumber": { "type": "string" },
+        "lastRegistrationToken": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "studentName", "fatherName", "className", "section", "rollNumber", "studentNumber", "registrationNumber", "lastRegistrationToken", "createdAt", "updatedAt"]
+    },
+    "Registration": {
+      "title": "Registration",
+      "description": "Examination registration application with token, paper codes, fee, timing, and status.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "registrationToken": { "type": "string" },
+        "verificationId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "fatherName": { "type": "string" },
+        "className": { "type": "string" },
+        "section": { "type": "string" },
+        "rollNumber": { "type": "string" },
+        "studentNumber": { "type": "string" },
+        "registrationNumber": { "type": "string" },
+        "timingId": { "type": "string" },
+        "timingLabel": { "type": "string" },
+        "subjectIds": { "type": "array" },
+        "subjectNames": { "type": "array" },
+        "paperCodes": { "type": "array" },
+        "subjectCount": { "type": "integer" },
+        "totalFeePkr": { "type": "integer" },
+        "termsAccepted": { "type": "boolean" },
+        "attendanceStatus": { "type": "string", "enum": ["PENDING", "PRESENT", "ABSENT", "LATE"] },
+        "resultStatus": { "type": "string", "enum": ["PENDING", "PASS", "FAIL", "SUPPLEMENTARY"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "registrationToken", "verificationId", "studentName", "fatherName", "className", "section", "rollNumber", "studentNumber", "registrationNumber", "timingId", "timingLabel", "subjectIds", "subjectNames", "paperCodes", "subjectCount", "totalFeePkr", "termsAccepted", "attendanceStatus", "resultStatus", "createdAt", "updatedAt"]
+    },
+    "RegisteredSubject": {
+      "title": "RegisteredSubject",
+      "description": "Per-subject enrollment entry linked to a registration and paper code.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "registrationId": { "type": "string" },
+        "registrationToken": { "type": "string" },
+        "subjectId": { "type": "string" },
+        "subjectName": { "type": "string" },
+        "paperCode": { "type": "string" },
+        "className": { "type": "string" },
+        "timingId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "registrationId", "registrationToken", "subjectId", "subjectName", "paperCode", "className", "timingId", "createdAt"]
+    },
+    "PaperCodeRecord": {
+      "title": "PaperCodeRecord",
+      "description": "Unique paper code reservation keyed by paperCode to guarantee zero duplicates.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "registrationId": { "type": "string" },
+        "registrationToken": { "type": "string" },
+        "subjectId": { "type": "string" },
+        "subjectName": { "type": "string" },
+        "paperCode": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "registrationId", "registrationToken", "subjectId", "subjectName", "paperCode", "createdAt"]
+    },
+    "RegistrationTokenRecord": {
+      "title": "RegistrationTokenRecord",
+      "description": "Unique registration token reservation keyed by registrationToken.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "registrationId": { "type": "string" },
+        "registrationToken": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "registrationId", "registrationToken", "createdAt"]
+    },
+    "QrVerification": {
+      "title": "QrVerification",
+      "description": "Opaque QR verification record containing non-sensitive attendance verification summary.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "registrationId": { "type": "string" },
+        "registrationToken": { "type": "string" },
+        "studentName": { "type": "string" },
+        "className": { "type": "string" },
+        "section": { "type": "string" },
+        "timingId": { "type": "string" },
+        "timingLabel": { "type": "string" },
+        "subjectNames": { "type": "array" },
+        "paperCodes": { "type": "array" },
+        "attendanceStatus": { "type": "string", "enum": ["PENDING", "PRESENT", "ABSENT", "LATE"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "registrationId", "registrationToken", "studentName", "className", "section", "timingId", "timingLabel", "subjectNames", "paperCodes", "attendanceStatus", "createdAt", "updatedAt"]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "Admin-only examination session attendance entry keyed by registrationId_timingId.",
+      "type": "object",
+      "properties": {
+        "registrationId": { "type": "string" },
+        "registrationToken": { "type": "string" },
+        "verificationId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "className": { "type": "string" },
+        "section": { "type": "string" },
+        "timingId": { "type": "string" },
+        "timingLabel": { "type": "string" },
+        "status": { "type": "string", "enum": ["PRESENT", "ABSENT", "LATE"] },
+        "markedByUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["registrationId", "registrationToken", "verificationId", "studentName", "className", "section", "timingId", "timingLabel", "status", "markedByUid", "createdAt", "updatedAt"]
+    },
+    "ExamResult": {
+      "title": "ExamResult",
+      "description": "Manual examination result card recorded by authorized administration.",
+      "type": "object",
+      "properties": {
+        "registrationId": { "type": "string" },
+        "registrationToken": { "type": "string" },
+        "userId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "fatherName": { "type": "string" },
+        "className": { "type": "string" },
+        "section": { "type": "string" },
+        "rollNumber": { "type": "string" },
+        "studentNumber": { "type": "string" },
+        "registrationNumber": { "type": "string" },
+        "subjectResults": { "type": "array" },
+        "totalMaxMarks": { "type": "number" },
+        "totalObtainedMarks": { "type": "number" },
+        "percentage": { "type": "number" },
+        "remarks": { "type": "string" },
+        "resultStatus": { "type": "string", "enum": ["PENDING", "PASS", "FAIL", "SUPPLEMENTARY"] },
+        "updatedByUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["registrationId", "registrationToken", "userId", "studentName", "fatherName", "className", "section", "rollNumber", "studentNumber", "registrationNumber", "subjectResults", "totalMaxMarks", "totalObtainedMarks", "percentage", "remarks", "resultStatus", "updatedByUid", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/admins/{uid}": {
+      "schema": { "$ref": "#/entities/AdminGrant" },
+      "description": "Admin role grants keyed by Firebase UID."
+    },
+    "/administrators/{adminId}": {
+      "schema": { "$ref": "#/entities/Administrator" },
+      "description": "Hashed admin credentials and rate-limit state."
+    },
+    "/academy_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/AcademySettings" },
+      "description": "Academy configuration and branding assets."
+    },
+    "/subjects/{subjectId}": {
+      "schema": { "$ref": "#/entities/Subject" },
+      "description": "Configurable examination subjects."
+    },
+    "/examination_timings/{timingId}": {
+      "schema": { "$ref": "#/entities/ExaminationTiming" },
+      "description": "Active examination timing slots."
+    },
+    "/counters/{counterId}": {
+      "schema": { "$ref": "#/entities/Counter" },
+      "description": "Atomic sequence counters for tokens and paper codes."
+    },
+    "/students/{studentId}": {
+      "schema": { "$ref": "#/entities/Student" },
+      "description": "Registered student profiles."
+    },
+    "/registrations/{registrationId}": {
+      "schema": { "$ref": "#/entities/Registration" },
+      "description": "Submitted examination registrations."
+    },
+    "/registered_subjects/{itemId}": {
+      "schema": { "$ref": "#/entities/RegisteredSubject" },
+      "description": "Individual registered subject entries."
+    },
+    "/paper_codes/{paperCode}": {
+      "schema": { "$ref": "#/entities/PaperCodeRecord" },
+      "description": "Unique paper code reservation documents."
+    },
+    "/registration_tokens/{token}": {
+      "schema": { "$ref": "#/entities/RegistrationTokenRecord" },
+      "description": "Unique registration token reservation documents."
+    },
+    "/qr_verifications/{verificationId}": {
+      "schema": { "$ref": "#/entities/QrVerification" },
+      "description": "QR verification records keyed by opaque verificationId."
+    },
+    "/attendance/{attendanceId}": {
+      "schema": { "$ref": "#/entities/AttendanceRecord" },
+      "description": "Session attendance records keyed by registrationId_timingId."
+    },
+    "/results/{registrationId}": {
+      "schema": { "$ref": "#/entities/ExamResult" },
+      "description": "Examination results recorded manually by admins."
+    }
+  }
+}
