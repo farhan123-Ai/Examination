@@ -15,11 +15,14 @@ import com.example.model.SubjectItem
 import com.example.model.UiState
 import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -57,71 +60,130 @@ data class StudentFormState(
             termsAccepted
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class StudentPortalViewModel(
-    private val repository: StudentRegistrationRepository,
-    private val currentUserId: String
+    private val repository: StudentRegistrationRepository
 ) : ViewModel() {
 
-    val academySettings: StateFlow<AcademySettings> = repository.observeAcademySettings()
-        .catch { error ->
-            val firestoreError = generateSequence(error) { it.cause }
-                .filterIsInstance<FirebaseFirestoreException>()
-                .firstOrNull()
-            if (firestoreError == null && error is CancellationException) throw error
-            Log.w(TAG, "Error observing academy settings", firestoreError ?: error)
-            emit(AcademySettings(id = "main"))
+    private val _authUserId = MutableStateFlow<String?>(null)
+    val authUserId: StateFlow<String?> = _authUserId.asStateFlow()
+
+    fun setAuthenticatedUserId(uid: String?) {
+        val previous = _authUserId.value
+        _authUserId.value = uid
+        if (previous != null && uid == null) {
+            _formState.update {
+                it.copy(
+                    submittedRegistration = null,
+                    verificationLookupResult = null,
+                    verificationError = null,
+                    submitError = null
+                )
+            }
+        }
+    }
+
+    val academySettings: StateFlow<AcademySettings> = _authUserId
+        .flatMapLatest { uid ->
+            if (uid.isNullOrBlank()) {
+                flowOf(AcademySettings(id = "main"))
+            } else {
+                repository.observeAcademySettings()
+                    .catch { error ->
+                        val firestoreError = generateSequence(error) { it.cause }
+                            .filterIsInstance<FirebaseFirestoreException>()
+                            .firstOrNull()
+                        if (firestoreError == null && error is CancellationException) throw error
+                        Log.w(TAG, "Error observing academy settings", firestoreError ?: error)
+                        emit(AcademySettings(id = "main"))
+                    }
+            }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), AcademySettings(id = "main"))
 
-    val subjectsState: StateFlow<UiState<List<SubjectItem>>> = repository.observeSubjects()
-        .map<List<SubjectItem>, UiState<List<SubjectItem>>> { UiState.Success(it) }
-        .catch { error ->
-            val firestoreError = generateSequence(error) { it.cause }
-                .filterIsInstance<FirebaseFirestoreException>()
-                .firstOrNull()
-            if (firestoreError == null && error is CancellationException) throw error
-            Log.w(TAG, "Error observing subjects", firestoreError ?: error)
-            emit(UiState.Success(DefaultCatalog.DEFAULT_SUBJECTS))
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), UiState.Loading)
-
-    val timingsState: StateFlow<UiState<List<ExaminationTiming>>> = repository.observeTimings()
-        .map<List<ExaminationTiming>, UiState<List<ExaminationTiming>>> { UiState.Success(it) }
-        .catch { error ->
-            val firestoreError = generateSequence(error) { it.cause }
-                .filterIsInstance<FirebaseFirestoreException>()
-                .firstOrNull()
-            if (firestoreError == null && error is CancellationException) throw error
-            Log.w(TAG, "Error observing timings", firestoreError ?: error)
-            emit(UiState.Success(DefaultCatalog.DEFAULT_TIMINGS))
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), UiState.Loading)
-
-    val myRegistrationsState: StateFlow<UiState<List<RegistrationRecord>>> =
-        repository.observeMyRegistrations(currentUserId)
-            .map<List<RegistrationRecord>, UiState<List<RegistrationRecord>>> { UiState.Success(it) }
-            .catch { error ->
-                val firestoreError = generateSequence(error) { it.cause }
-                    .filterIsInstance<FirebaseFirestoreException>()
-                    .firstOrNull()
-                if (firestoreError == null && error is CancellationException) throw error
-                val root = firestoreError ?: error
-                Log.w(TAG, "Error observing my registrations", root)
-                emit(UiState.Error(root.message ?: "Failed to load registrations"))
+    val subjectsState: StateFlow<UiState<List<SubjectItem>>> = _authUserId
+        .flatMapLatest { uid ->
+            if (uid.isNullOrBlank()) {
+                flowOf(UiState.Success(DefaultCatalog.DEFAULT_SUBJECTS))
+            } else {
+                repository.observeSubjects()
+                    .map<List<SubjectItem>, UiState<List<SubjectItem>>> { UiState.Success(it) }
+                    .catch { error ->
+                        val firestoreError = generateSequence(error) { it.cause }
+                            .filterIsInstance<FirebaseFirestoreException>()
+                            .firstOrNull()
+                        if (firestoreError == null && error is CancellationException) throw error
+                        Log.w(TAG, "Error observing subjects", firestoreError ?: error)
+                        emit(UiState.Success(DefaultCatalog.DEFAULT_SUBJECTS))
+                    }
             }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), UiState.Loading)
+        }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000L),
+            UiState.Success(DefaultCatalog.DEFAULT_SUBJECTS)
+        )
 
-    val myResultsState: StateFlow<List<ExamResultRecord>> =
-        repository.observeMyResults(currentUserId)
-            .catch { error ->
-                val firestoreError = generateSequence(error) { it.cause }
-                    .filterIsInstance<FirebaseFirestoreException>()
-                    .firstOrNull()
-                if (firestoreError == null && error is CancellationException) throw error
-                Log.w(TAG, "Error observing my results", firestoreError ?: error)
-                emit(emptyList())
+    val timingsState: StateFlow<UiState<List<ExaminationTiming>>> = _authUserId
+        .flatMapLatest { uid ->
+            if (uid.isNullOrBlank()) {
+                flowOf(UiState.Success(DefaultCatalog.DEFAULT_TIMINGS))
+            } else {
+                repository.observeTimings()
+                    .map<List<ExaminationTiming>, UiState<List<ExaminationTiming>>> { UiState.Success(it) }
+                    .catch { error ->
+                        val firestoreError = generateSequence(error) { it.cause }
+                            .filterIsInstance<FirebaseFirestoreException>()
+                            .firstOrNull()
+                        if (firestoreError == null && error is CancellationException) throw error
+                        Log.w(TAG, "Error observing timings", firestoreError ?: error)
+                        emit(UiState.Success(DefaultCatalog.DEFAULT_TIMINGS))
+                    }
             }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+        }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000L),
+            UiState.Success(DefaultCatalog.DEFAULT_TIMINGS)
+        )
+
+    val myRegistrationsState: StateFlow<UiState<List<RegistrationRecord>>> = _authUserId
+        .flatMapLatest { uid ->
+            if (uid.isNullOrBlank()) {
+                flowOf(UiState.Success(emptyList()))
+            } else {
+                repository.observeMyRegistrations(uid)
+                    .map<List<RegistrationRecord>, UiState<List<RegistrationRecord>>> { UiState.Success(it) }
+                    .catch { error ->
+                        val firestoreError = generateSequence(error) { it.cause }
+                            .filterIsInstance<FirebaseFirestoreException>()
+                            .firstOrNull()
+                        if (firestoreError == null && error is CancellationException) throw error
+                        val root = firestoreError ?: error
+                        Log.w(TAG, "Error observing my registrations", root)
+                        emit(UiState.Error(root.message ?: "Failed to load registrations"))
+                    }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), UiState.Success(emptyList()))
+
+    val myResultsState: StateFlow<List<ExamResultRecord>> = _authUserId
+        .flatMapLatest { uid ->
+            if (uid.isNullOrBlank()) {
+                flowOf(emptyList())
+            } else {
+                repository.observeMyResults(uid)
+                    .catch { error ->
+                        val firestoreError = generateSequence(error) { it.cause }
+                            .filterIsInstance<FirebaseFirestoreException>()
+                            .firstOrNull()
+                        if (firestoreError == null && error is CancellationException) throw error
+                        Log.w(TAG, "Error observing my results", firestoreError ?: error)
+                        emit(emptyList())
+                    }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
     private val _formState = MutableStateFlow(StudentFormState())
     val formState: StateFlow<StudentFormState> = _formState.asStateFlow()

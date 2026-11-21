@@ -101,6 +101,8 @@ import kotlinx.coroutines.withContext
 @Composable
 fun StudentPortalScreen(
     viewModel: StudentPortalViewModel,
+    isSignedIn: Boolean,
+    onRequireAuth: (reason: String, onAuthenticated: () -> Unit) -> Unit,
     onOpenAdminLogin: () -> Unit,
     onSignOut: () -> Unit
 ) {
@@ -193,13 +195,29 @@ fun StudentPortalScreen(
                 },
                 actions = {
                     IconButton(
-                        onClick = { showQrLookupSheet = true },
+                        onClick = {
+                            if (isSignedIn) {
+                                showQrLookupSheet = true
+                            } else {
+                                onRequireAuth("Sign in with Google to verify your QR registration token.") {
+                                    showQrLookupSheet = true
+                                }
+                            }
+                        },
                         modifier = Modifier.testTag("open_qr_lookup_button")
                     ) {
                         Icon(Icons.Filled.QrCode2, contentDescription = "Verify QR Registration")
                     }
                     IconButton(
-                        onClick = { showMyApplicationsSheet = true },
+                        onClick = {
+                            if (isSignedIn) {
+                                showMyApplicationsSheet = true
+                            } else {
+                                onRequireAuth("Sign in with Google to view your saved registrations, receipts, and results.") {
+                                    showMyApplicationsSheet = true
+                                }
+                            }
+                        },
                         modifier = Modifier.testTag("my_registrations_button")
                     ) {
                         BadgedBox(
@@ -212,11 +230,13 @@ fun StudentPortalScreen(
                             Icon(Icons.Filled.FolderShared, contentDescription = "My Saved Applications")
                         }
                     }
-                    IconButton(
-                        onClick = onSignOut,
-                        modifier = Modifier.testTag("student_sign_out_button")
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign Out")
+                    if (isSignedIn) {
+                        IconButton(
+                            onClick = onSignOut,
+                            modifier = Modifier.testTag("student_sign_out_button")
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign Out")
+                        }
                     }
                 }
             )
@@ -690,7 +710,17 @@ fun StudentPortalScreen(
                             }
 
                             Button(
-                                onClick = { viewModel.submitRegistration(allSubjects, activeTimings) },
+                                onClick = {
+                                    if (isSignedIn) {
+                                        viewModel.submitRegistration(allSubjects, activeTimings)
+                                    } else {
+                                        onRequireAuth(
+                                            "Sign in with Google to submit your registration, generate your permanent token and paper codes, and save your official receipt."
+                                        ) {
+                                            viewModel.submitRegistration(allSubjects, activeTimings)
+                                        }
+                                    }
+                                },
                                 enabled = form.isFormValid && !form.isSubmitting,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -736,7 +766,15 @@ fun StudentPortalScreen(
                         textAlign = TextAlign.Center
                     )
                     TextButton(
-                        onClick = onOpenAdminLogin,
+                        onClick = {
+                            if (isSignedIn) {
+                                onOpenAdminLogin()
+                            } else {
+                                onRequireAuth("Sign in with the authorized administrator Google account to unlock the Admin Portal.") {
+                                    onOpenAdminLogin()
+                                }
+                            }
+                        },
                         modifier = Modifier
                             .minimumInteractiveComponentSize()
                             .testTag("hidden_admin_button")

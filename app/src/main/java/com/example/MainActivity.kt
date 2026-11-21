@@ -5,8 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -23,7 +23,8 @@ import com.example.data.AdminRepository
 import com.example.data.StudentRegistrationRepository
 import com.example.ui.admin.AdminDashboardScreen
 import com.example.ui.admin.AdminLoginScreen
-import com.example.ui.auth.AuthScreen
+import com.example.ui.auth.GoogleSignInPromptDialog
+import com.example.ui.auth.attemptAutoSignIn
 import com.example.ui.auth.signOutUser
 import com.example.ui.student.StudentPortalScreen
 import com.example.ui.theme.AwanAcademyTheme
@@ -42,6 +43,11 @@ private enum class AppDestination {
     ADMIN_LOGIN,
     ADMIN_DASHBOARD
 }
+
+private data class PendingAuthPrompt(
+    val reason: String,
+    val onAuthenticated: () -> Unit
+)
 
 private fun FirebaseAuth.authStateFlow(): Flow<FirebaseUser?> = callbackFlow {
     val listener = FirebaseAuth.AuthStateListener { auth ->
@@ -65,118 +71,147 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun AwanAcademyApp() {
-    val authFlow = remember { Firebase.auth.authStateFlow() }
-    val currentUser by authFlow.collectAsStateWithLifecycle(initialValue = Firebase.auth.currentUser)
-
-    val user = currentUser
-    if (user == null) {
-        AuthScreen(onAuthSuccess = {})
-        return
-    }
-
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val credentialManager = remember { CredentialManager.create(context) }
 
-    key(user.uid) {
-        val studentFactory = remember(user.uid) {
-            viewModelFactory {
-                initializer {
-                    val app = this[APPLICATION_KEY]!!
-                    StudentPortalViewModel(
-                        repository = StudentRegistrationRepository(app.applicationContext),
-                        currentUserId = user.uid
+    val authFlow = remember { Firebase.auth.authStateFlow() }
+    val currentUser by authFlow.collectAsStateWithLifecycle(initialValue = Firebase.auth.currentUser)
+
+    // Attempt silent Google Sign-In quietly in the background without blocking startup UI
+    LaunchedEffect(Unit) {
+        attemptAutoSignIn(
+            context = context,
+            credentialManager = credentialManager,
+            onAuthSuccess = {},
+            onUnauthenticated = {},
+            scope = scope
+        )
+    }
+
+    val studentFactory = remember {
+        viewModelFactory {
+            initializer {
+                val app = this[APPLICATION_KEY]!!
+                StudentPortalViewModel(
+                    repository = StudentRegistrationRepository(app.applicationContext)
+                )
+            }
+        }
+    }
+    val adminFactory = remember {
+        viewModelFactory {
+            initializer {
+                val app = this[APPLICATION_KEY]!!
+                AdminViewModel(
+                    adminRepository = AdminRepository(app.applicationContext)
+                )
+            }
+        }
+    }
+
+    val studentViewModel: StudentPortalViewModel = viewModel(factory = studentFactory)
+    val adminViewModel: AdminViewModel = viewModel(factory = adminFactory)
+
+    LaunchedEffect(currentUser?.uid) {
+        studentViewModel.setAuthenticatedUserId(currentUser?.uid)
+        if (currentUser == null) {
+            adminViewModel.logoutAdmin()
+        }
+    }
+
+    var destination by rememberSaveable { mutableStateOf(AppDestination.STUDENT_PORTAL) }
+    var pendingAuthPrompt by remember { mutableStateOf<PendingAuthPrompt?>(null) }
+
+    val adminSession by adminViewModel.session.collectAsStateWithLifecycle()
+    val settings by studentViewModel.academySettings.collectAsStateWithLifecycle()
+    val adminUiState by adminViewModel.uiState.collectAsStateWithLifecycle()
+
+    val isSignedIn = currentUser != null
+
+    val activeDestination = when {
+        !isSignedIn -> AppDestination.STUDENT_PORTAL
+        destination == AppDestination.ADMIN_DASHBOARD && adminSession?.isValid() == true -> {
+            AppDestination.ADMIN_DASHBOARD
+        }
+        destination == AppDestination.ADMIN_DASHBOARD -> {
+            AppDestination.ADMIN_LOGIN
+        }
+        else -> destination
+    }
+
+    when (activeDestination) {
+        AppDestination.STUDENT_PORTAL -> {
+            StudentPortalScreen(
+                viewModel = studentViewModel,
+                isSignedIn = isSignedIn,
+                onRequireAuth = { reason, onAuthenticated ->
+                    if (Firebase.auth.currentUser != null) {
+                        onAuthenticated()
+                    } else {
+                        pendingAuthPrompt = PendingAuthPrompt(reason, onAuthenticated)
+                    }
+                },
+                onOpenAdminLogin = {
+                    destination = if (adminSession?.isValid() == true) {
+                        AppDestination.ADMIN_DASHBOARD
+                    } else {
+                        AppDestination.ADMIN_LOGIN
+                    }
+                },
+                onSignOut = {
+                    adminViewModel.logoutAdmin()
+                    destination = AppDestination.STUDENT_PORTAL
+                    signOutUser(
+                        credentialManager = credentialManager,
+                        scope = scope
                     )
                 }
-            }
+            )
         }
-        val adminFactory = remember(user.uid) {
-            viewModelFactory {
-                initializer {
-                    val app = this[APPLICATION_KEY]!!
-                    AdminViewModel(
-                        adminRepository = AdminRepository(app.applicationContext)
-                    )
+
+        AppDestination.ADMIN_LOGIN -> {
+            AdminLoginScreen(
+                settings = settings,
+                isLoggingIn = adminUiState.isLoggingIn,
+                loginError = adminUiState.loginError,
+                onLogin = { username, password ->
+                    adminViewModel.login(username, password) {
+                        destination = AppDestination.ADMIN_DASHBOARD
+                    }
+                },
+                onBack = {
+                    adminViewModel.clearFeedback()
+                    destination = AppDestination.STUDENT_PORTAL
                 }
-            }
+            )
         }
 
-        val studentViewModel: StudentPortalViewModel = viewModel(
-            key = "student_${user.uid}",
-            factory = studentFactory
+        AppDestination.ADMIN_DASHBOARD -> {
+            AdminDashboardScreen(
+                adminViewModel = adminViewModel,
+                studentViewModel = studentViewModel,
+                onExitToStudentPortal = {
+                    destination = AppDestination.STUDENT_PORTAL
+                },
+                onAdminLogout = {
+                    adminViewModel.logoutAdmin()
+                    destination = AppDestination.STUDENT_PORTAL
+                }
+            )
+        }
+    }
+
+    pendingAuthPrompt?.let { prompt ->
+        GoogleSignInPromptDialog(
+            reason = prompt.reason,
+            onDismiss = { pendingAuthPrompt = null },
+            onAuthSuccess = {
+                val action = prompt.onAuthenticated
+                pendingAuthPrompt = null
+                studentViewModel.setAuthenticatedUserId(Firebase.auth.currentUser?.uid)
+                action()
+            }
         )
-        val adminViewModel: AdminViewModel = viewModel(
-            key = "admin_${user.uid}",
-            factory = adminFactory
-        )
-
-        var destination by rememberSaveable { mutableStateOf(AppDestination.STUDENT_PORTAL) }
-        val adminSession by adminViewModel.session.collectAsStateWithLifecycle()
-        val settings by studentViewModel.academySettings.collectAsStateWithLifecycle()
-        val adminUiState by adminViewModel.uiState.collectAsStateWithLifecycle()
-
-        val activeDestination = when {
-            destination == AppDestination.ADMIN_DASHBOARD && adminSession?.isValid() == true -> {
-                AppDestination.ADMIN_DASHBOARD
-            }
-            destination == AppDestination.ADMIN_DASHBOARD -> {
-                AppDestination.ADMIN_LOGIN
-            }
-            else -> destination
-        }
-
-        when (activeDestination) {
-            AppDestination.STUDENT_PORTAL -> {
-                StudentPortalScreen(
-                    viewModel = studentViewModel,
-                    onOpenAdminLogin = {
-                        destination = if (adminSession?.isValid() == true) {
-                            AppDestination.ADMIN_DASHBOARD
-                        } else {
-                            AppDestination.ADMIN_LOGIN
-                        }
-                    },
-                    onSignOut = {
-                        adminViewModel.logoutAdmin()
-                        destination = AppDestination.STUDENT_PORTAL
-                        signOutUser(
-                            credentialManager = credentialManager,
-                            scope = scope
-                        )
-                    }
-                )
-            }
-
-            AppDestination.ADMIN_LOGIN -> {
-                AdminLoginScreen(
-                    settings = settings,
-                    isLoggingIn = adminUiState.isLoggingIn,
-                    loginError = adminUiState.loginError,
-                    onLogin = { username, password ->
-                        adminViewModel.login(username, password) {
-                            destination = AppDestination.ADMIN_DASHBOARD
-                        }
-                    },
-                    onBack = {
-                        adminViewModel.clearFeedback()
-                        destination = AppDestination.STUDENT_PORTAL
-                    }
-                )
-            }
-
-            AppDestination.ADMIN_DASHBOARD -> {
-                AdminDashboardScreen(
-                    adminViewModel = adminViewModel,
-                    studentViewModel = studentViewModel,
-                    onExitToStudentPortal = {
-                        destination = AppDestination.STUDENT_PORTAL
-                    },
-                    onAdminLogout = {
-                        adminViewModel.logoutAdmin()
-                        destination = AppDestination.STUDENT_PORTAL
-                    }
-                )
-            }
-        }
     }
 }
